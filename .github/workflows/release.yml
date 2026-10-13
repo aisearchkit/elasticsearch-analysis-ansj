@@ -7,11 +7,17 @@ on:
         description: "git tag to release"
       es-version:
         required: true
-        description: 'es version'
+        description: "es version"
+
+permissions:
+  contents: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.inputs.tag }}
+      ES_VERSION: ${{ github.event.inputs.es-version }}
     steps:
       - uses: actions/checkout@v7
       - name: Set up JDK 8
@@ -20,18 +26,24 @@ jobs:
           java-version: '8'
           distribution: 'temurin'
           cache: 'maven'
-      - name: Build with Maven
-        run: mvn package -Dmaven.test.skip=true
-      - run: mkdir staging && cp target/releases/* staging
+      - name: Build with Maven (es ${{ github.event.inputs.es-version }})
+        run: |
+          mvn -B versions:set -DnewVersion="${ES_VERSION}.0" -DgenerateBackupPoms=false
+          mvn -B clean package -Dmaven.test.skip=true -Delasticsearch.version="$ES_VERSION" package -Dmaven.test.skip=true -Delasticsearch.version="$ES_VERSION"
+      - name: Prepare staging
+        run: |
+          mkdir -p staging
+          cp target/releases/*.zip staging/elasticsearch-analysis-ansj-"$ES_VERSION".0.zip
+          ls -l staging
       - uses: actions/upload-artifact@v4
         with:
-          name: Package
+          name: Package-${{ github.event.inputs.es-version }}
           path: staging
       - uses: "marvinpinto/action-automatic-releases@v1.2.1"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "${{github.event.inputs.tag}}"
-          title: "支持es${{github.event.inputs.es-version}}版本的分词插件"
+          automatic_release_tag: "${{ github.event.inputs.tag }}"
+          title: "支持 es${{ github.event.inputs.es-version }} 版本的分词插件"
           prerelease: false
           files: |
             staging/*.zip
